@@ -1,14 +1,13 @@
 import React from "react";
 import { Row, Col, Typography, Button } from 'antd';
 import firebase, { auth, db } from '../../firebase/config';
-import { addDocument } from "../../firebase/services";
+import { addDocument, generateKeywords } from "../../firebase/services";
 
 const { Title } = Typography;
 
 const fbProvider = new firebase.auth.FacebookAuthProvider();
 
 export default function Login() {
-
   const handleFbLogin = async () => {
     const { additionalUserInfo, user } = await auth.signInWithPopup(fbProvider);
     
@@ -17,8 +16,9 @@ export default function Login() {
         displayName: user.displayName,
         email: user.email,
         photoURL: user.photoURL,
-        uid: user.displayName,
-        providerId: additionalUserInfo.providerId
+        uid: user.uid,
+        providerId: additionalUserInfo.providerId,
+        keyword: generateKeywords(user.displayName)
       });
     }
   }

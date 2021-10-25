@@ -1,8 +1,12 @@
-import { Avatar, Button, Input, Tooltip, Form } from 'antd';
+import { Avatar, Button, Input, Tooltip, Form, Alert } from 'antd';
 import { UserAddOutlined } from '@ant-design/icons';
-import React from 'react';
+import React, { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import styled from 'styled-components';
 import Message from './Message';
+import { AppContext } from '../../Context/AppProvider';
+import useFirestore from '../../hooks/useFirestore';
+import { AuthContext } from '../../Context/AuthProvider';
+import { addDocument } from '../../firebase/services';
 
 const WrapperStyled = styled.div`
   height: 100vh;
@@ -67,56 +71,122 @@ const FormStyled = styled(Form)`
 `;
 
 export default function ChatWindow() {
+  const { selectedRoom, setIsInviteMemberVisible } = useContext(AppContext);
+  const {
+    user: { uid, photoURL, displayName },
+  } = useContext(AuthContext);
+
+  const [inputValue, setInputValue] = useState('');
+  const [form] = Form.useForm();
+  const inputRef = useRef(null);
+  const messageListRef = useRef(null);
+
+  const handleInputChange = (e) => {
+    setInputValue(e.target.value);
+  }
+  
+  const handleOnSubmit = () => {
+    addDocument('messages', {
+      text: inputValue,
+      uid,
+      photoURL,
+      roomId: selectedRoom.id,
+      displayName,
+    });
+
+    form.resetFields(['message']);
+
+    // focus to input again after submit
+    if (inputRef?.current) {
+      setTimeout(() => {
+        inputRef.current.focus();
+      });
+    }
+  };
+
+  const usersCondition = useMemo(() => {
+    return {
+      fieldName: 'uid',
+      operator: 'in',
+      compareValue: selectedRoom.members
+    };
+  }, [selectedRoom.members]);
+
+  const members = useFirestore('users', usersCondition);
+
+  const condition = useMemo(
+    () => ({
+      fieldName: 'roomId',
+      operator: '==',
+      compareValue: selectedRoom.id,
+    }),
+    [selectedRoom.id]
+  );
+
+  const messages = useFirestore('messages', condition);
+
+  useEffect(() => {
+    // scroll to bottom after message changed
+    if (messageListRef?.current) {
+      messageListRef.current.scrollTop =
+        messageListRef.current.scrollHeight + 50;
+    }
+  }, [messages]);
+
   return (
     <WrapperStyled>
       <HeaderStyled>
         <div className="header-info">
-          <p className="header-title">Room 1</p>
-          <span className="header-description">Day la room 1</span>
+          <p className="header-title">{selectedRoom.name}</p>
+          <span className="header-description">{selectedRoom.description}</span>
         </div>
 
         <ButtonGroupStyled>
-          <Button icon={<UserAddOutlined/>} type='text'>
+          <Button
+            icon={<UserAddOutlined/>}
+            type='text'
+            onClick={() => setIsInviteMemberVisible(true)}
+          >
             Mời
           </Button>
           <Avatar.Group size="small" maxCount={2}>
-            <Tooltip title="A">
-              <Avatar> A</Avatar>
-            </Tooltip>
-            <Tooltip title="A">
-              <Avatar> A</Avatar>
-            </Tooltip>
-            <Tooltip title="A">
-              <Avatar> A</Avatar>
-            </Tooltip>
-            <Tooltip title="A">
-              <Avatar> A</Avatar>
-            </Tooltip>
-            <Tooltip title="A">
-              <Avatar> A</Avatar>
-            </Tooltip>
-            <Tooltip title="A">
-              <Avatar> A</Avatar>
-            </Tooltip>
-            <Tooltip title="A">
-              <Avatar> A</Avatar>
-            </Tooltip>
+            {members.map((member) => (
+              <Tooltip title={member.displayName} key={member.id}>
+                <Avatar src={member.photoURL}>
+                  {member.photoURL
+                    ? ''
+                    : member.displayName?.charAt(0)?.toUpperCase()}
+                </Avatar>
+              </Tooltip>
+            ))}
           </Avatar.Group>
         </ButtonGroupStyled>
       </HeaderStyled>
       
       <ContentStyled>
         <MessageListStyled>
-          <Message text="Test" photoURL={null} displayName="manh" createdAt={123123123} />
-          <Message text="Test" photoURL={null} displayName="manh" createdAt={123123123} />
-          <Message text="Test" photoURL={null} displayName="manh" createdAt={123123123} />
-          <Message text="Test" photoURL={null} displayName="manh" createdAt={123123123} />
+          {messages.map((mes) => (
+            <Message
+              key={mes.id}
+              text={mes.text}
+              photoURL={mes.photoURL}
+              displayName={mes.displayName}
+              createdAt={mes.createdAt}
+            />
+          ))}
         </MessageListStyled>
-        <FormStyled>
-          <Form.Item>
-            <Input placeholder="Nhập tin nhắn..." bordered={false} autoComplete="off" />
+        <FormStyled form={form}>
+          <Form.Item name="message">
+            <Input
+              ref={inputRef}
+              onChange={handleInputChange}
+              onPressEnter={handleOnSubmit}
+              placeholder="Nhập tin nhắn..."
+              bordered={false}
+              autoComplete="off"
+            />
           </Form.Item>
-          <Button type="primary">Gửi</Button>
+          <Button type="primary" onClick={handleOnSubmit}>Gửi</Button>
         </FormStyled>
       </ContentStyled>
     </WrapperStyled>
